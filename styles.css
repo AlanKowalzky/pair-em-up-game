@@ -146,11 +146,14 @@ body {
 }
 
 .assists {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 10px;
     justify-content: center;
     margin: 20px 0;
-    flex-wrap: wrap;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .assist-btn {
@@ -181,6 +184,51 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.cell.valid-pair {
+    animation: pulse 0.5s ease-in-out;
+}
+
+.cell.invalid-pair {
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); background: #22c55e; }
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+.game-grid.eraser-mode .cell:not(.empty) {
+    cursor: crosshair !important;
+    border: 2px solid #ef4444 !important;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.7; }
+}
+
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #4ade80;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 .message {
@@ -324,6 +372,24 @@ body.light-theme .setting-item select {
     }
 }
 
+@media (max-width: 480px) {
+    .assists {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+    
+    .assist-btn {
+        font-size: 14px;
+        padding: 8px 12px;
+    }
+    
+    .game-info {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+}
+
 @media (max-width: 380px) {
     .container {
         padding: 10px;
@@ -332,5 +398,18 @@ body.light-theme .setting-item select {
     .cell {
         font-size: 14px;
         min-height: 35px;
+    }
+    
+    .title {
+        font-size: 1.5rem;
+    }
+    
+    .assists {
+        grid-template-columns: 1fr;
+    }
+    
+    .assist-btn {
+        width: 100%;
+        justify-content: space-between;
     }
 }

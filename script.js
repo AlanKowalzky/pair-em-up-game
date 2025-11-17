@@ -193,9 +193,11 @@ class PairEmUpGame {
         if (this.gameState.selectedCells.includes(index)) {
             this.gameState.selectedCells = this.gameState.selectedCells.filter(i => i !== index);
             cellElement.classList.remove('selected');
+            this.playSound('deselect');
         } else if (this.gameState.selectedCells.length < 2) {
             this.gameState.selectedCells.push(index);
             cellElement.classList.add('selected');
+            this.playSound('select');
             
             if (this.gameState.selectedCells.length === 2) {
                 setTimeout(() => this.checkPair(), 300);
@@ -211,7 +213,9 @@ class PairEmUpGame {
         if (this.isValidPair(num1, num2, index1, index2)) {
             this.processPair(num1, num2, index1, index2);
         } else {
-            this.clearSelection();
+            this.showPairFeedback([index1, index2], false);
+            this.playSound('invalidPair');
+            setTimeout(() => this.clearSelection(), 500);
         }
     }
 
@@ -269,22 +273,29 @@ class PairEmUpGame {
             points = 2;
         }
         
+        // Visual feedback for valid pair
+        this.showPairFeedback([index1, index2], true);
+        this.playSound('validPair');
+        
         this.gameState.score += points;
         this.gameState.grid[index1] = null;
         this.gameState.grid[index2] = null;
         this.gameState.assists.revert = 1;
         
-        this.clearSelection();
-        this.renderGrid();
-        this.updateScore();
-        this.updateAssistButtons();
-        
-        if (this.gameState.score >= this.gameState.targetScore) {
-            this.endGame(true);
-            return;
-        }
-        
-        this.checkLoseConditions();
+        setTimeout(() => {
+            this.clearSelection();
+            this.renderGrid();
+            this.updateScore();
+            this.updateAssistButtons();
+            
+            if (this.gameState.score >= this.gameState.targetScore) {
+                this.playSound('win');
+                this.endGame(true);
+                return;
+            }
+            
+            this.checkLoseConditions();
+        }, 500);
     }
 
     checkLoseConditions() {
@@ -458,11 +469,10 @@ class PairEmUpGame {
         if (this.gameState.assists.eraser > 0) {
             this.showMessage('Click on a number to erase it');
             this.eraserMode = true;
+            this.playSound('assist');
             
-            document.querySelectorAll('.cell:not(.empty)').forEach(cell => {
-                cell.style.cursor = 'crosshair';
-                cell.style.border = '2px solid #ef4444';
-            });
+            const grid = document.getElementById('gameGrid');
+            grid.classList.add('eraser-mode');
         }
     }
 
@@ -472,10 +482,8 @@ class PairEmUpGame {
             this.gameState.assists.eraser--;
             this.eraserMode = false;
             
-            document.querySelectorAll('.cell').forEach(cell => {
-                cell.style.cursor = 'pointer';
-                cell.style.border = '2px solid transparent';
-            });
+            const grid = document.getElementById('gameGrid');
+            grid.classList.remove('eraser-mode');
             
             this.renderGrid();
             this.updateAssistButtons();
@@ -640,19 +648,146 @@ class PairEmUpGame {
         const msg = document.createElement('div');
         msg.className = 'message';
         msg.textContent = text;
-        msg.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #4ade80;
-            color: #000;
-            padding: 10px 20px;
-            border-radius: 5px;
-            z-index: 1000;
-        `;
         
         document.body.appendChild(msg);
         setTimeout(() => msg.remove(), 2000);
+    }
+
+    showPairFeedback(indices, isValid) {
+        indices.forEach(index => {
+            const cell = document.querySelector(`[data-index="${index}"]`);
+            if (cell) {
+                cell.classList.add(isValid ? 'valid-pair' : 'invalid-pair');
+                setTimeout(() => {
+                    cell.classList.remove('valid-pair', 'invalid-pair');
+                }, 500);
+            }
+        });
+    }
+
+    playSound(type) {
+        const settings = JSON.parse(localStorage.getItem('pairEmUpSettings') || '{"sound": true}');
+        if (!settings.sound) return;
+        
+        // Create audio context for sound effects
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        // Different frequencies for different sounds
+        const frequencies = {
+            select: 440,
+            deselect: 330,
+            validPair: 660,
+            invalidPair: 220,
+            assist: 550,
+            win: 880,
+            lose: 165
+        };
+        
+        oscillator.frequency.setValueAtTime(frequencies[type] || 440, audioContext.currentTime);
+        oscillator.type = type === 'invalidPair' || type === 'lose' ? 'sawtooth' : 'sine';
+        
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.2);
+    }
+
+    useShuffle() {
+        if (this.gameState.assists.shuffle > 0) {
+            this.playSound('assist');
+            const numbers = [];
+            const positions = [];
+            
+            this.gameState.grid.forEach((num, index) => {
+                if (num !== null) {
+                    numbers.push(num);
+                    positions.push(index);
+                }
+            });
+            
+            const shuffledNumbers = this.shuffleArray(numbers);
+            
+            positions.forEach((pos, i) => {
+                this.gameState.grid[pos] = shuffledNumbers[i];
+            });
+            
+            this.gameState.assists.shuffle--;
+            this.renderGrid();
+            this.updateAssistButtons();
+        }
+    }
+
+    useAddNumbers() {
+        if (this.gameState.assists.addNumbers > 0) {
+            this.playSound('assist');
+            const remainingNumbers = this.gameState.grid.filter(n => n !== null).length;
+            
+            const currentRows = Math.ceil(this.gameState.grid.length / 9);
+            const newRows = Math.ceil((this.gameState.grid.length + remainingNumbers) / 9);
+            
+            if (newRows >= 50) {
+                this.showMessage('Cannot add numbers - would exceed 50-line limit!');
+                return;
+            }
+            
+            switch(this.gameState.mode) {
+                case 'classic':
+                    const maxNum = Math.max(...this.gameState.grid.filter(n => n !== null));
+                    for (let i = 0; i < remainingNumbers; i++) {
+                        this.gameState.grid.push(maxNum + 1 + i);
+                    }
+                    break;
+                    
+                case 'random':
+                    const existingNums = this.gameState.grid.filter(n => n !== null);
+                    const allNums = [];
+                    for (let i = 1; i <= 9; i++) allNums.push(i);
+                    for (let i = 10; i <= 19; i++) allNums.push(i);
+                    
+                    const availableNums = allNums.filter(n => !existingNums.includes(n));
+                    const shuffled = this.shuffleArray(availableNums);
+                    
+                    for (let i = 0; i < Math.min(remainingNumbers, shuffled.length); i++) {
+                        this.gameState.grid.push(shuffled[i]);
+                    }
+                    break;
+                    
+                case 'chaotic':
+                    for (let i = 0; i < remainingNumbers; i++) {
+                        this.gameState.grid.push(Math.floor(Math.random() * 9) + 1);
+                    }
+                    break;
+            }
+            
+            this.gameState.assists.addNumbers--;
+            this.renderGrid();
+            this.updateAssistButtons();
+        }
+    }
+
+    checkLoseConditions() {
+        const validMoves = this.countValidMoves();
+        const hasAssists = this.gameState.assists.addNumbers > 0 || 
+                          this.gameState.assists.shuffle > 0 || 
+                          this.gameState.assists.eraser > 0;
+        
+        const totalRows = Math.ceil(this.gameState.grid.length / 9);
+        if (totalRows >= 50) {
+            this.playSound('lose');
+            this.endGame(false, 'Grid limit reached!');
+            return;
+        }
+        
+        if (validMoves === 0 && !hasAssists) {
+            this.playSound('lose');
+            this.endGame(false, 'No moves available!');
+        }
     }
 }
 
