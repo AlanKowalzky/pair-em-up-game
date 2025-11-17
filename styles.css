@@ -183,6 +183,115 @@ body {
     justify-content: center;
 }
 
+.message {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #4ade80;
+    color: #000;
+    padding: 10px 20px;
+    border-radius: 5px;
+    z-index: 1000;
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+
+.result-info {
+    margin: 30px 0;
+    text-align: center;
+}
+
+.result-info p {
+    margin: 10px 0;
+    font-size: 18px;
+}
+
+.results-table {
+    margin: 20px 0;
+}
+
+.result-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px;
+    margin: 5px 0;
+    background: #374151;
+    border-radius: 5px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.settings-panel {
+    margin: 30px 0;
+    text-align: left;
+    max-width: 300px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.setting-item {
+    margin: 20px 0;
+}
+
+.setting-item label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+}
+
+.setting-item input, .setting-item select {
+    padding: 5px;
+    border-radius: 3px;
+    border: 1px solid #4b5563;
+    background: #374151;
+    color: #fff;
+}
+
+/* Light theme */
+body.light-theme {
+    background: #f3f4f6;
+    color: #000;
+}
+
+body.light-theme .cell {
+    background: #e5e7eb;
+    color: #000;
+}
+
+body.light-theme .cell.selected {
+    background: #22c55e;
+    color: #fff;
+}
+
+body.light-theme .cell.empty {
+    background: #d1d5db;
+}
+
+body.light-theme .game-grid {
+    background: #d1d5db;
+}
+
+body.light-theme .btn-secondary {
+    background: #e5e7eb;
+    color: #000;
+}
+
+body.light-theme .result-row {
+    background: #e5e7eb;
+}
+
+body.light-theme .setting-item input,
+body.light-theme .setting-item select {
+    background: #fff;
+    border-color: #d1d5db;
+    color: #000;
+}
+
 @media (max-width: 768px) {
     .title {
         font-size: 2rem;
@@ -201,6 +310,17 @@ body {
     .cell {
         font-size: 16px;
         min-height: 40px;
+    }
+    
+    .result-row {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .message {
+        right: 10px;
+        left: 10px;
+        text-align: center;
     }
 }
 

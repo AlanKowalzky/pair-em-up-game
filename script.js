@@ -17,11 +17,18 @@ class PairEmUpGame {
             lastMove: null
         };
         this.timerInterval = null;
+        this.eraserMode = false;
         this.init();
     }
 
     init() {
         this.createStartScreen();
+        this.loadSettings();
+    }
+
+    loadSettings() {
+        const settings = JSON.parse(localStorage.getItem('pairEmUpSettings') || '{"sound": true, "theme": "dark"}');
+        this.applyTheme(settings.theme);
     }
 
     createStartScreen() {
@@ -46,7 +53,6 @@ class PairEmUpGame {
             </div>
         `;
         
-        // Check if saved game exists
         if (localStorage.getItem('pairEmUpSave')) {
             document.getElementById('continueBtn').style.display = 'inline-block';
         }
@@ -65,6 +71,7 @@ class PairEmUpGame {
             eraser: 5
         };
         this.gameState.lastMove = null;
+        this.eraserMode = false;
         
         this.generateGrid(mode);
         this.createGameScreen();
@@ -76,7 +83,6 @@ class PairEmUpGame {
         
         switch(mode) {
             case 'classic':
-                // Numbers 1-9 in first row, 10-19 in next rows (excluding 0)
                 for (let i = 1; i <= 9; i++) {
                     this.gameState.grid.push(i);
                 }
@@ -86,7 +92,6 @@ class PairEmUpGame {
                 break;
                 
             case 'random':
-                // Same numbers as classic but shuffled
                 const numbers = [];
                 for (let i = 1; i <= 9; i++) numbers.push(i);
                 for (let i = 10; i <= 19; i++) numbers.push(i);
@@ -94,7 +99,6 @@ class PairEmUpGame {
                 break;
                 
             case 'chaotic':
-                // 27 random numbers from 1-9
                 for (let i = 0; i < 27; i++) {
                     this.gameState.grid.push(Math.floor(Math.random() * 9) + 1);
                 }
@@ -168,7 +172,13 @@ class PairEmUpGame {
                 cell.classList.add('empty');
             } else {
                 cell.textContent = number;
-                cell.onclick = () => this.selectCell(index);
+                cell.onclick = () => {
+                    if (this.eraserMode) {
+                        this.eraseCell(index);
+                    } else {
+                        this.selectCell(index);
+                    }
+                };
             }
             
             gridElement.appendChild(cell);
@@ -181,11 +191,9 @@ class PairEmUpGame {
         const cellElement = document.querySelector(`[data-index="${index}"]`);
         
         if (this.gameState.selectedCells.includes(index)) {
-            // Deselect cell
             this.gameState.selectedCells = this.gameState.selectedCells.filter(i => i !== index);
             cellElement.classList.remove('selected');
         } else if (this.gameState.selectedCells.length < 2) {
-            // Select cell
             this.gameState.selectedCells.push(index);
             cellElement.classList.add('selected');
             
@@ -208,13 +216,11 @@ class PairEmUpGame {
     }
 
     isValidPair(num1, num2, index1, index2) {
-        // Check if numbers form a valid pair
         const isIdentical = num1 === num2;
         const sumToTen = num1 + num2 === 10;
         
         if (!isIdentical && !sumToTen) return false;
         
-        // Check connectivity rules
         return this.areConnected(index1, index2);
     }
 
@@ -224,10 +230,8 @@ class PairEmUpGame {
         const row2 = Math.floor(index2 / 9);
         const col2 = index2 % 9;
         
-        // Adjacent cells
         if (Math.abs(row1 - row2) + Math.abs(col1 - col2) === 1) return true;
         
-        // Same row - check if path is clear
         if (row1 === row2) {
             const start = Math.min(col1, col2) + 1;
             const end = Math.max(col1, col2);
@@ -237,7 +241,6 @@ class PairEmUpGame {
             return true;
         }
         
-        // Same column - check if path is clear
         if (col1 === col2) {
             const start = Math.min(row1, row2) + 1;
             const end = Math.max(row1, row2);
@@ -247,7 +250,6 @@ class PairEmUpGame {
             return true;
         }
         
-        // Row boundary rule - last of one row with first of next
         if (col1 === 8 && col2 === 0 && row2 === row1 + 1) return true;
         if (col2 === 8 && col1 === 0 && row1 === row2 + 1) return true;
         
@@ -255,35 +257,50 @@ class PairEmUpGame {
     }
 
     processPair(num1, num2, index1, index2) {
-        // Save move for revert
         this.gameState.lastMove = {
             index1, index2, num1, num2, 
             scoreBefore: this.gameState.score
         };
         
-        // Calculate points
         let points = 0;
         if (num1 === num2) {
-            points = num1 === 5 ? 3 : 1; // Bonus for double fives
+            points = num1 === 5 ? 3 : 1;
         } else {
-            points = 2; // Sum to 10
+            points = 2;
         }
         
-        // Update game state
         this.gameState.score += points;
         this.gameState.grid[index1] = null;
         this.gameState.grid[index2] = null;
         this.gameState.assists.revert = 1;
         
-        // Update UI
         this.clearSelection();
         this.renderGrid();
         this.updateScore();
         this.updateAssistButtons();
         
-        // Check win condition
         if (this.gameState.score >= this.gameState.targetScore) {
             this.endGame(true);
+            return;
+        }
+        
+        this.checkLoseConditions();
+    }
+
+    checkLoseConditions() {
+        const validMoves = this.countValidMoves();
+        const hasAssists = this.gameState.assists.addNumbers > 0 || 
+                          this.gameState.assists.shuffle > 0 || 
+                          this.gameState.assists.eraser > 0;
+        
+        const totalRows = Math.ceil(this.gameState.grid.length / 9);
+        if (totalRows >= 50) {
+            this.endGame(false, 'Grid limit reached!');
+            return;
+        }
+        
+        if (validMoves === 0 && !hasAssists) {
+            this.endGame(false, 'No moves available!');
         }
     }
 
@@ -307,6 +324,14 @@ class PairEmUpGame {
         document.getElementById('eraserCounter').textContent = this.gameState.assists.eraser;
         
         document.getElementById('revertBtn').disabled = this.gameState.assists.revert === 0;
+        
+        const addBtn = document.querySelector('[onclick="game.useAddNumbers()"]');
+        const shuffleBtn = document.querySelector('[onclick="game.useShuffle()"]');
+        const eraserBtn = document.querySelector('[onclick="game.useEraser()"]');
+        
+        if (addBtn) addBtn.disabled = this.gameState.assists.addNumbers === 0;
+        if (shuffleBtn) shuffleBtn.disabled = this.gameState.assists.shuffle === 0;
+        if (eraserBtn) eraserBtn.disabled = this.gameState.assists.eraser === 0;
     }
 
     startTimer() {
@@ -325,7 +350,7 @@ class PairEmUpGame {
 
     saveGame() {
         localStorage.setItem('pairEmUpSave', JSON.stringify(this.gameState));
-        alert('Game saved!');
+        this.showMessage('Game saved!');
     }
 
     continueGame() {
@@ -337,11 +362,10 @@ class PairEmUpGame {
         }
     }
 
-    // Placeholder methods for assists
     useHint() {
         const validMoves = this.countValidMoves();
         const display = validMoves > 5 ? '5+' : validMoves.toString();
-        alert(`Available moves: ${display}`);
+        this.showMessage(`Available moves: ${display}`);
     }
 
     useRevert() {
@@ -361,25 +385,101 @@ class PairEmUpGame {
 
     useAddNumbers() {
         if (this.gameState.assists.addNumbers > 0) {
-            // Implementation will be added in next phase
+            const remainingNumbers = this.gameState.grid.filter(n => n !== null).length;
+            
+            const currentRows = Math.ceil(this.gameState.grid.length / 9);
+            const newRows = Math.ceil((this.gameState.grid.length + remainingNumbers) / 9);
+            
+            if (newRows >= 50) {
+                this.showMessage('Cannot add numbers - would exceed 50-line limit!');
+                return;
+            }
+            
+            switch(this.gameState.mode) {
+                case 'classic':
+                    const maxNum = Math.max(...this.gameState.grid.filter(n => n !== null));
+                    for (let i = 0; i < remainingNumbers; i++) {
+                        this.gameState.grid.push(maxNum + 1 + i);
+                    }
+                    break;
+                    
+                case 'random':
+                    const existingNums = this.gameState.grid.filter(n => n !== null);
+                    const allNums = [];
+                    for (let i = 1; i <= 9; i++) allNums.push(i);
+                    for (let i = 10; i <= 19; i++) allNums.push(i);
+                    
+                    const availableNums = allNums.filter(n => !existingNums.includes(n));
+                    const shuffled = this.shuffleArray(availableNums);
+                    
+                    for (let i = 0; i < Math.min(remainingNumbers, shuffled.length); i++) {
+                        this.gameState.grid.push(shuffled[i]);
+                    }
+                    break;
+                    
+                case 'chaotic':
+                    for (let i = 0; i < remainingNumbers; i++) {
+                        this.gameState.grid.push(Math.floor(Math.random() * 9) + 1);
+                    }
+                    break;
+            }
+            
             this.gameState.assists.addNumbers--;
+            this.renderGrid();
             this.updateAssistButtons();
         }
     }
 
     useShuffle() {
         if (this.gameState.assists.shuffle > 0) {
-            // Implementation will be added in next phase
+            const numbers = [];
+            const positions = [];
+            
+            this.gameState.grid.forEach((num, index) => {
+                if (num !== null) {
+                    numbers.push(num);
+                    positions.push(index);
+                }
+            });
+            
+            const shuffledNumbers = this.shuffleArray(numbers);
+            
+            positions.forEach((pos, i) => {
+                this.gameState.grid[pos] = shuffledNumbers[i];
+            });
+            
             this.gameState.assists.shuffle--;
+            this.renderGrid();
             this.updateAssistButtons();
         }
     }
 
     useEraser() {
         if (this.gameState.assists.eraser > 0) {
-            // Implementation will be added in next phase
+            this.showMessage('Click on a number to erase it');
+            this.eraserMode = true;
+            
+            document.querySelectorAll('.cell:not(.empty)').forEach(cell => {
+                cell.style.cursor = 'crosshair';
+                cell.style.border = '2px solid #ef4444';
+            });
+        }
+    }
+
+    eraseCell(index) {
+        if (this.eraserMode && this.gameState.grid[index] !== null) {
+            this.gameState.grid[index] = null;
             this.gameState.assists.eraser--;
+            this.eraserMode = false;
+            
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.style.cursor = 'pointer';
+                cell.style.border = '2px solid transparent';
+            });
+            
+            this.renderGrid();
             this.updateAssistButtons();
+            this.checkLoseConditions();
         }
     }
 
@@ -397,22 +497,163 @@ class PairEmUpGame {
         return count;
     }
 
-    endGame(won) {
+    endGame(won, reason = '') {
         if (this.timerInterval) clearInterval(this.timerInterval);
-        const message = won ? 'Congratulations! You won!' : 'Game Over!';
-        alert(`${message}\nFinal Score: ${this.gameState.score}\nTime: ${Math.floor(this.gameState.timer / 60)}:${(this.gameState.timer % 60).toString().padStart(2, '0')}`);
-        this.createStartScreen();
+        
+        this.saveGameResult(won);
+        
+        const message = won ? 'Congratulations! You won!' : `Game Over! ${reason}`;
+        const time = `${Math.floor(this.gameState.timer / 60)}:${(this.gameState.timer % 60).toString().padStart(2, '0')}`;
+        
+        setTimeout(() => {
+            this.showGameResult(won, message, this.gameState.score, time);
+        }, 500);
     }
 
-    // Placeholder methods
-    showSettings() {
-        alert('Settings panel - will be implemented in next phase');
+    saveGameResult(won) {
+        const result = {
+            mode: this.gameState.mode,
+            score: this.gameState.score,
+            time: this.gameState.timer,
+            won: won,
+            date: new Date().toISOString()
+        };
+        
+        let results = JSON.parse(localStorage.getItem('pairEmUpResults') || '[]');
+        results.unshift(result);
+        results = results.slice(0, 5);
+        
+        localStorage.setItem('pairEmUpResults', JSON.stringify(results));
+        localStorage.removeItem('pairEmUpSave');
+    }
+
+    showGameResult(won, message, score, time) {
+        document.body.innerHTML = `
+            <div class="container">
+                <div class="start-screen">
+                    <h1 class="title">${won ? '🏆 Victory!' : '💀 Game Over'}</h1>
+                    <div class="result-info">
+                        <p>${message}</p>
+                        <p><strong>Final Score:</strong> ${score}</p>
+                        <p><strong>Time:</strong> ${time}</p>
+                        <p><strong>Mode:</strong> ${this.gameState.mode.charAt(0).toUpperCase() + this.gameState.mode.slice(1)}</p>
+                    </div>
+                    <div class="mode-buttons">
+                        <button class="btn btn-primary" onclick="game.startGame('${this.gameState.mode}')">Play Again</button>
+                        <button class="btn btn-secondary" onclick="game.createStartScreen()">Main Menu</button>
+                        <button class="btn btn-secondary" onclick="game.showResults()">View Results</button>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     showResults() {
-        alert('Results panel - will be implemented in next phase');
+        const results = JSON.parse(localStorage.getItem('pairEmUpResults') || '[]');
+        
+        let resultsHTML = '<h2>Game Results (Latest 5)</h2>';
+        
+        if (results.length === 0) {
+            resultsHTML += '<p>No games played yet.</p>';
+        } else {
+            resultsHTML += '<div class="results-table">';
+            results.forEach((result, index) => {
+                const time = `${Math.floor(result.time / 60)}:${(result.time % 60).toString().padStart(2, '0')}`;
+                const status = result.won ? '🏆 Won' : '💀 Lost';
+                resultsHTML += `
+                    <div class="result-row">
+                        <span>${status}</span>
+                        <span>${result.mode.charAt(0).toUpperCase() + result.mode.slice(1)}</span>
+                        <span>Score: ${result.score}</span>
+                        <span>Time: ${time}</span>
+                    </div>
+                `;
+            });
+            resultsHTML += '</div>';
+        }
+        
+        document.body.innerHTML = `
+            <div class="container">
+                <div class="start-screen">
+                    ${resultsHTML}
+                    <div class="mode-buttons">
+                        <button class="btn btn-secondary" onclick="game.createStartScreen()">Back to Menu</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    showSettings() {
+        const settings = JSON.parse(localStorage.getItem('pairEmUpSettings') || '{"sound": true, "theme": "dark"}');
+        
+        document.body.innerHTML = `
+            <div class="container">
+                <div class="start-screen">
+                    <h2>Settings</h2>
+                    <div class="settings-panel">
+                        <div class="setting-item">
+                            <label>
+                                <input type="checkbox" id="soundToggle" ${settings.sound ? 'checked' : ''}>
+                                Sound Effects
+                            </label>
+                        </div>
+                        <div class="setting-item">
+                            <label>
+                                Theme:
+                                <select id="themeSelect">
+                                    <option value="dark" ${settings.theme === 'dark' ? 'selected' : ''}>Dark</option>
+                                    <option value="light" ${settings.theme === 'light' ? 'selected' : ''}>Light</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mode-buttons">
+                        <button class="btn btn-primary" onclick="game.saveSettings()">Save Settings</button>
+                        <button class="btn btn-secondary" onclick="game.createStartScreen()">Back to Menu</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    saveSettings() {
+        const settings = {
+            sound: document.getElementById('soundToggle').checked,
+            theme: document.getElementById('themeSelect').value
+        };
+        
+        localStorage.setItem('pairEmUpSettings', JSON.stringify(settings));
+        this.applyTheme(settings.theme);
+        this.showMessage('Settings saved!');
+        setTimeout(() => this.createStartScreen(), 1000);
+    }
+
+    applyTheme(theme) {
+        document.body.className = theme === 'light' ? 'light-theme' : '';
+    }
+
+    showMessage(text) {
+        const existingMsg = document.querySelector('.message');
+        if (existingMsg) existingMsg.remove();
+        
+        const msg = document.createElement('div');
+        msg.className = 'message';
+        msg.textContent = text;
+        msg.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4ade80;
+            color: #000;
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 1000;
+        `;
+        
+        document.body.appendChild(msg);
+        setTimeout(() => msg.remove(), 2000);
     }
 }
 
-// Initialize game
 const game = new PairEmUpGame();
