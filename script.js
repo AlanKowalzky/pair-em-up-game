@@ -37,7 +37,7 @@ class PairEmUpGame {
                 <div class="start-screen">
                     <h1 class="title">Pair 'em Up</h1>
                     <div class="author">
-                        <p>By <a href="https://github.com/yourusername" target="_blank">@yourusername</a></p>
+                        <p>By <a href="https://github.com/AlanKowalzky" target="_blank">@AlanKowalzky</a></p>
                     </div>
                     <div class="mode-buttons">
                         <button class="btn btn-primary" onclick="game.startGame('classic')">Classic</button>
@@ -273,7 +273,6 @@ class PairEmUpGame {
             points = 2;
         }
         
-        // Visual feedback for valid pair
         this.showPairFeedback([index1, index2], true);
         this.playSound('validPair');
         
@@ -306,11 +305,13 @@ class PairEmUpGame {
         
         const totalRows = Math.ceil(this.gameState.grid.length / 9);
         if (totalRows >= 50) {
+            this.playSound('lose');
             this.endGame(false, 'Grid limit reached!');
             return;
         }
         
         if (validMoves === 0 && !hasAssists) {
+            this.playSound('lose');
             this.endGame(false, 'No moves available!');
         }
     }
@@ -396,7 +397,13 @@ class PairEmUpGame {
 
     useAddNumbers() {
         if (this.gameState.assists.addNumbers > 0) {
+            this.playSound('assist');
             const remainingNumbers = this.gameState.grid.filter(n => n !== null).length;
+            
+            if (remainingNumbers === 0) {
+                this.showMessage('No numbers to add - grid is empty!');
+                return;
+            }
             
             const currentRows = Math.ceil(this.gameState.grid.length / 9);
             const newRows = Math.ceil((this.gameState.grid.length + remainingNumbers) / 9);
@@ -408,9 +415,16 @@ class PairEmUpGame {
             
             switch(this.gameState.mode) {
                 case 'classic':
-                    const maxNum = Math.max(...this.gameState.grid.filter(n => n !== null));
-                    for (let i = 0; i < remainingNumbers; i++) {
-                        this.gameState.grid.push(maxNum + 1 + i);
+                    const nonNullNumbers = this.gameState.grid.filter(n => n !== null);
+                    if (nonNullNumbers.length === 0) {
+                        for (let i = 1; i <= Math.min(19, remainingNumbers); i++) {
+                            this.gameState.grid.push(i);
+                        }
+                    } else {
+                        const maxNum = Math.max(...nonNullNumbers);
+                        for (let i = 0; i < remainingNumbers; i++) {
+                            this.gameState.grid.push(maxNum + 1 + i);
+                        }
                     }
                     break;
                     
@@ -420,11 +434,17 @@ class PairEmUpGame {
                     for (let i = 1; i <= 9; i++) allNums.push(i);
                     for (let i = 10; i <= 19; i++) allNums.push(i);
                     
-                    const availableNums = allNums.filter(n => !existingNums.includes(n));
-                    const shuffled = this.shuffleArray(availableNums);
+                    let availableNums = allNums.filter(n => !existingNums.includes(n));
                     
-                    for (let i = 0; i < Math.min(remainingNumbers, shuffled.length); i++) {
-                        this.gameState.grid.push(shuffled[i]);
+                    if (availableNums.length === 0) {
+                        availableNums = [...allNums];
+                    }
+                    
+                    const shuffled = this.shuffleArray(availableNums);
+                    const numbersToAdd = Math.min(remainingNumbers, shuffled.length);
+                    
+                    for (let i = 0; i < numbersToAdd; i++) {
+                        this.gameState.grid.push(shuffled[i % shuffled.length]);
                     }
                     break;
                     
@@ -443,6 +463,7 @@ class PairEmUpGame {
 
     useShuffle() {
         if (this.gameState.assists.shuffle > 0) {
+            this.playSound('assist');
             const numbers = [];
             const positions = [];
             
@@ -669,124 +690,56 @@ class PairEmUpGame {
         const settings = JSON.parse(localStorage.getItem('pairEmUpSettings') || '{"sound": true}');
         if (!settings.sound) return;
         
-        // Create audio context for sound effects
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        // Different frequencies for different sounds
-        const frequencies = {
-            select: 440,
-            deselect: 330,
-            validPair: 660,
-            invalidPair: 220,
-            assist: 550,
-            win: 880,
-            lose: 165
-        };
-        
-        oscillator.frequency.setValueAtTime(frequencies[type] || 440, audioContext.currentTime);
-        oscillator.type = type === 'invalidPair' || type === 'lose' ? 'sawtooth' : 'sine';
-        
-        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-        
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.2);
-    }
-
-    useShuffle() {
-        if (this.gameState.assists.shuffle > 0) {
-            this.playSound('assist');
-            const numbers = [];
-            const positions = [];
-            
-            this.gameState.grid.forEach((num, index) => {
-                if (num !== null) {
-                    numbers.push(num);
-                    positions.push(index);
-                }
-            });
-            
-            const shuffledNumbers = this.shuffleArray(numbers);
-            
-            positions.forEach((pos, i) => {
-                this.gameState.grid[pos] = shuffledNumbers[i];
-            });
-            
-            this.gameState.assists.shuffle--;
-            this.renderGrid();
-            this.updateAssistButtons();
-        }
-    }
-
-    useAddNumbers() {
-        if (this.gameState.assists.addNumbers > 0) {
-            this.playSound('assist');
-            const remainingNumbers = this.gameState.grid.filter(n => n !== null).length;
-            
-            const currentRows = Math.ceil(this.gameState.grid.length / 9);
-            const newRows = Math.ceil((this.gameState.grid.length + remainingNumbers) / 9);
-            
-            if (newRows >= 50) {
-                this.showMessage('Cannot add numbers - would exceed 50-line limit!');
+        try {
+            if (!window.AudioContext && !window.webkitAudioContext) {
+                console.warn('Web Audio API not supported');
                 return;
             }
             
-            switch(this.gameState.mode) {
-                case 'classic':
-                    const maxNum = Math.max(...this.gameState.grid.filter(n => n !== null));
-                    for (let i = 0; i < remainingNumbers; i++) {
-                        this.gameState.grid.push(maxNum + 1 + i);
-                    }
-                    break;
-                    
-                case 'random':
-                    const existingNums = this.gameState.grid.filter(n => n !== null);
-                    const allNums = [];
-                    for (let i = 1; i <= 9; i++) allNums.push(i);
-                    for (let i = 10; i <= 19; i++) allNums.push(i);
-                    
-                    const availableNums = allNums.filter(n => !existingNums.includes(n));
-                    const shuffled = this.shuffleArray(availableNums);
-                    
-                    for (let i = 0; i < Math.min(remainingNumbers, shuffled.length); i++) {
-                        this.gameState.grid.push(shuffled[i]);
-                    }
-                    break;
-                    
-                case 'chaotic':
-                    for (let i = 0; i < remainingNumbers; i++) {
-                        this.gameState.grid.push(Math.floor(Math.random() * 9) + 1);
-                    }
-                    break;
-            }
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
             
-            this.gameState.assists.addNumbers--;
-            this.renderGrid();
-            this.updateAssistButtons();
+            if (audioContext.state === 'suspended') {
+                audioContext.resume().then(() => {
+                    this.createSound(audioContext, type);
+                }).catch(err => {
+                    console.warn('Audio context resume failed:', err);
+                });
+            } else {
+                this.createSound(audioContext, type);
+            }
+        } catch (error) {
+            console.warn('Audio playback failed:', error);
         }
     }
-
-    checkLoseConditions() {
-        const validMoves = this.countValidMoves();
-        const hasAssists = this.gameState.assists.addNumbers > 0 || 
-                          this.gameState.assists.shuffle > 0 || 
-                          this.gameState.assists.eraser > 0;
-        
-        const totalRows = Math.ceil(this.gameState.grid.length / 9);
-        if (totalRows >= 50) {
-            this.playSound('lose');
-            this.endGame(false, 'Grid limit reached!');
-            return;
-        }
-        
-        if (validMoves === 0 && !hasAssists) {
-            this.playSound('lose');
-            this.endGame(false, 'No moves available!');
+    
+    createSound(audioContext, type) {
+        try {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            const frequencies = {
+                select: 440,
+                deselect: 330,
+                validPair: 660,
+                invalidPair: 220,
+                assist: 550,
+                win: 880,
+                lose: 165
+            };
+            
+            oscillator.frequency.setValueAtTime(frequencies[type] || 440, audioContext.currentTime);
+            oscillator.type = type === 'invalidPair' || type === 'lose' ? 'sawtooth' : 'sine';
+            
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.2);
+        } catch (error) {
+            console.warn('Sound creation failed:', error);
         }
     }
 }
